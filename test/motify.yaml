@@ -1,0 +1,5 @@
+test:
+  source: ./test.txt
+  target:
+    windows: ./windows.txt
+    linux: ./unix.txt
