@@ -1,10 +1,10 @@
 use clap::{Clap, AppSettings};
-use yaml_rust::{YamlLoader};
+use yaml_rust::{YamlLoader, Yaml, ScanError};
 
 mod reporter;
 mod symlink;
-use std::{fs, env};
-use std::error::Error;
+use std::{fs, env, io, error};
+use bunt::println;
 
 
 
@@ -45,34 +45,74 @@ struct Undeploy {
 }
 
 
+#[derive(Debug)]
+enum ConfigError {
+    Yaml(ScanError),
+    Io(io::Error)
+}
+impl From<io::Error> for ConfigError {
+    fn from(err: io::Error) -> ConfigError {
+        ConfigError::Io(err)
+    }
+}
+
+impl From<ScanError> for ConfigError {
+    fn from(err: ScanError) -> ConfigError {
+        ConfigError::Yaml(err)
+    }
+}
+impl ToString for ConfigError {
+    fn to_string(&self) -> String {
+        match self{
+            ConfigError::Yaml(scan) => {
+                scan.to_string()
+            }
+            ConfigError::Io(io) => {
+                io.to_string()
+            }
+        }
+    }
+}
+
+
 fn main() {
     let opts: Opts = Opts::parse();
-    let docs= YamlLoader::load_from_str(&fs::read_to_string(&opts.config).unwrap()).unwrap();
-    let config =  &docs[0];
-    for (name, target) in config.as_hash().unwrap() {
-        let progress = reporter::Reporter {
-            name: String::from(name.as_str().unwrap()),
-            verbose: opts.verbose
-        };
-        let try_block = || -> Result<(), Box<Error>> {
-            let source = &String::from(target["source"].as_str().unwrap());
-            let target = &String::from(target["target"][env::consts::OS].as_str().unwrap());
-            match &opts.subcmd {
-                SubCommand::Deploy(config) => {
-                    symlink::symlink(source, target, &config, &progress)
-                }
-                SubCommand::Undeploy(_config) => {
-                    symlink::unsymlink(source, target, &progress)
-                }
-            };
-            return Ok(());
-        };
-        if let Err(_err) = try_block() {
-            progress.error(&_err.to_string());
-        }else{
-            progress.done();
-        }
 
+    match || -> Result<Vec<Yaml>, ConfigError> {
+        let fileString = &fs::read_to_string(&opts.config)?;
+        return Ok(YamlLoader::load_from_str(fileString)?);
+    }() {
+        Err(err) => {
+            println!("{$red+bold}Error in reading config file:{/$} {[red]}", err.to_string());
+        }
+        Ok(docs) => {
+            let config =  &docs[0];
+            for (name, target) in config.as_hash().unwrap() {
+                let progress = reporter::Reporter {
+                    name: String::from(name.as_str().unwrap()),
+                    verbose: opts.verbose
+                };
+                let try_block = || -> Result<(), Box<error::Error>> {
+                    let source = &String::from(target["source"].as_str().unwrap());
+                    let target = &String::from(target["target"][env::consts::OS].as_str().unwrap());
+                    match &opts.subcmd {
+                        SubCommand::Deploy(config) => {
+                            symlink::symlink(source, target, &config, &progress)
+                        }
+                        SubCommand::Undeploy(_config) => {
+                            symlink::unsymlink(source, target, &progress)
+                        }
+                    };
+                    return Ok(());
+                };
+                if let Err(_err) = try_block() {
+                    progress.error(&_err.to_string());
+                }else{
+                    progress.done();
+                }
+
+            }
+        }
     }
 }
 
