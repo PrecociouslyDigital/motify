@@ -14,7 +14,7 @@ use bunt::println;
 #[derive(Clap)]
 #[clap(version = "1.0", author = "PrecociouslyDigital <skye@hyphen-emdash.com>", setting = AppSettings::SubcommandRequiredElseHelp)]
 struct Opts {
-    /// Sets a custom config file. Could have been an Option<T> with no default too
+    /// Sets a custom config file.
     #[clap(short, long, default_value = "motify.yaml")]
     config: String,
     /// Output verbose output

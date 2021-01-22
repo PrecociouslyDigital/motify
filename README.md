@@ -13,8 +13,7 @@ for ease of version control and backup.
         -V, --version    Prints version information
     
     OPTIONS:
-        -c, --config <config>    Sets a custom config file. Could have been an Option<T> with no default
-                                 too [default: motify.yaml]
+        -c, --config <config>    Sets a custom config file. [default: motify.yaml]
     
     SUBCOMMANDS:
         deploy      Deploy symlinks according to a motive.yaml file
