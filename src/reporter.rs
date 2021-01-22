@@ -17,6 +17,11 @@ impl Reporter {
     pub fn progress(&self, message: &String) {
         println!("{$blue+bold}{}:{/$} {}", self.name, message);
     }
+    pub fn info(&self, message: &String) {
+        if self.verbose > 0 {
+            println!("{$blue}{}:{/$} {}", self.name, message);
+        }
+    }
     pub fn error(&self, message: &String) {
         println!("{$red+bold}Error in deploying {}:{/$} {[red]}", self.name, message);
     }
