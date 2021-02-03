@@ -1,0 +1,36 @@
+name: Rust
+
+on:
+  push:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  
+  build:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        include:
+          - target: stable-x86_64-pc-windows-msvc
+            bin: motify.exe
+            name: motify 64 bit
+          - target: stable-x86_64-pc-windows-msvc
+            bin: motify.exe
+            name: motify 64 bit
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install latest rustup
+      uses: actions-rs/toolchain@v1
+      with:
+          toolchain: stable
+          override: true
+          target: ${{ matrix.target }}
+    - name: Install Cross
+      run: cargo install cross
+    - name: Build
+      run: cross build --release --verbose
+    
