@@ -1,5 +1,14 @@
-test:
-  source: ./test.txt
-  target:
-    windows: ./windows.txt
-    linux: ./unix.txt
+deploy:
+  test:
+    source: ./test.txt
+    target:
+      windows: ./windows.$TESTVAR.txt
+      linux: ./unix.$TESTVAR.txt
+  uwu:
+    source: ./$folder
+    target: ~/$uwuTarget
+env:
+  folder: test
+  uwuTarget:
+    windows: winuwu
+    linux: linuwu
