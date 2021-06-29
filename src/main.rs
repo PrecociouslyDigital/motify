@@ -47,7 +47,6 @@ struct Undeploy {
 
 fn main() {
     let opts: Opts = Opts::parse();
-    println!("{}", env::var("TESTVAR").unwrap());
     config::readYAML(&opts.config, |doc : &Yaml| {
         let config =  &doc["deploy"];
         let vars = &doc["env"];
