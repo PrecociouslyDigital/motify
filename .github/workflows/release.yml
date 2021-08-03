@@ -43,6 +43,7 @@ jobs:
   release:
     name: Release binaries on github
     needs: build
+    runs-on: ubuntu-latest
     steps:
       - name: Download a single artifact
         uses: actions/download-artifact@v2
