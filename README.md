@@ -3,6 +3,8 @@ Motify is a quick little portable utility for Windows, Macos and Linux to declar
 It's designed to help you keep all your configuration files for your various applications to a central place,
 for ease of version control and backup.
 
+[![Build and Release](https://github.com/PrecociouslyDigital/motify/actions/workflows/release.yml/badge.svg)](https://github.com/PrecociouslyDigital/motify/actions/workflows/release.yml)
+
 ## Usage
 ```
     motify.exe [FLAGS] [OPTIONS] <SUBCOMMAND>
