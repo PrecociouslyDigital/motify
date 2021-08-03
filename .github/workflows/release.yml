@@ -34,7 +34,8 @@ jobs:
       - name: Build Artifact
         uses: actions-rs/cargo@v1
         with:
-          command: build --release --target ${{ matrix.target }}
+          command: build
+          args: --release --target ${{ matrix.target }}
       - name: Upload release
         uses: actions/upload-artifact@v2
         with:
