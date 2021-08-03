@@ -1,0 +1,61 @@
+on: 
+  push:
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+
+name: Build and Release
+
+jobs:
+  build:
+    name: Build binaries
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            platform: ubuntu-latest
+            name: motify
+          - target: x86_64-pc-windows-msvc
+            platform: windows-latest
+            name: motify.exe
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install latest nightly
+        uses: actions-rs/toolchain@v1
+        with:
+            profile: minimal
+            toolchain: nightly
+            override: true
+            components: rustfmt, clippy
+            target: ${{ matrix.target }}
+      - name: Build Artifact
+        uses: actions-rs/cargo@v1
+        with:
+          command: build --release --target ${{ matrix.target }}
+      - name: Upload release
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ matrix.name }}
+          path: target/${{ matrix.target }}/release/${{name}}
+  release:
+    name: Release binaries on github
+    needs: build
+    steps:
+      - name: Download a single artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: motify
+      - name: Download a single artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: motify.exe
+      - uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.PAT_GITHUB }}"
+          prerelease: false
+          files: |
+            motify
+            motify.exe
