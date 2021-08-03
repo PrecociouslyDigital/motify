@@ -57,7 +57,9 @@ jobs:
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.PAT_GITHUB }}"
+          automatic_release_tag: "latest"
           prerelease: false
+          title: "Latest Release Builds"
           files: |
             motify
             motify.exe
