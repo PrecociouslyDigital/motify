@@ -39,7 +39,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: ${{ matrix.name }}
-          path: target/${{ matrix.target }}/release/${{name}}
+          path: target/${{ matrix.target }}/release/${{matrix.name}}
   release:
     name: Release binaries on github
     needs: build
