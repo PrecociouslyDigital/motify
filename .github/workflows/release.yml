@@ -20,6 +20,12 @@ jobs:
           - target: x86_64-pc-windows-msvc
             platform: windows-latest
             name: motify.exe
+          - target: x86_64-apple-darwin
+            platform: macos-latest
+            name: motify.app
+          - target: aarch64-apple-darwin
+            platform: macos-latest
+            name: motify-silicon.app
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v2
