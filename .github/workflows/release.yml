@@ -42,11 +42,18 @@ jobs:
         with:
           command: build
           args: --release --target ${{ matrix.target }}
-      - name: Upload release
+      - name: Upload release (windows)
+        if: ${{ eq(matrix.platform, "windows-latest") }}
         uses: actions/upload-artifact@v2
         with:
           name: ${{ matrix.name }}
-          path: target/${{ matrix.target }}/release/${{matrix.name}}
+          path: target/${{ matrix.target }}/release/motify.exe
+      - name: Upload release
+        if: ${{ neq(matrix.platform, "windows-latest") }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ matrix.name }}
+          path: target/${{ matrix.target }}/release/motify
   release:
     name: Release binaries on github
     needs: build
