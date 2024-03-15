@@ -67,11 +67,11 @@ jobs:
       - name: Download a single artifact
         uses: actions/download-artifact@v2
         with:
-          name: motify.app
+          name: motify-macos
       - name: Download a single artifact
         uses: actions/download-artifact@v2
         with:
-          name: motify-silicon.app
+          name: motify-macos-silicon
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.PAT_GITHUB }}"
