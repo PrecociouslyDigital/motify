@@ -17,18 +17,14 @@ jobs:
           - target: x86_64-unknown-linux-musl
             platform: ubuntu-latest
             name: motify
-            outputName: motify
           - target: x86_64-pc-windows-msvc
             platform: windows-latest
             name: motify.exe
-            outputName: motify.exe
           - target: x86_64-apple-darwin
             platform: macos-latest
-            outputName: motify
             name: motify.app
           - target: aarch64-apple-darwin
             platform: macos-latest
-            outputName: motify
             name: motify-silicon.app
     runs-on: ${{ matrix.platform }}
     steps:
@@ -46,11 +42,14 @@ jobs:
         with:
           command: build
           args: --release --target ${{ matrix.target }}
-      - name: Upload release (windows)
+      - name: Rename Mac releases
+        run: "[ ! -f motify ] || mv motify ${{ matrix.name }}"
+        shell: bash
+      - name: Upload release
         uses: actions/upload-artifact@v2
         with:
           name: ${{ matrix.name }}
-          path: target/${{ matrix.target }}/release/${{ matrix.outputName }}
+          path: target/${{ matrix.target }}/release/${{ matrix.name }}
   release:
     name: Release binaries on github
     needs: build
