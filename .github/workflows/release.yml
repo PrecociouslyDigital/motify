@@ -22,10 +22,10 @@ jobs:
             name: motify.exe
           - target: x86_64-apple-darwin
             platform: macos-latest
-            name: motify.app
+            name: motify-macos
           - target: aarch64-apple-darwin
             platform: macos-latest
-            name: motify-silicon.app
+            name: motify-macos-silicon
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v2
