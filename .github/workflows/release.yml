@@ -81,5 +81,5 @@ jobs:
           files: |
             motify
             motify.exe
-            motify.app
-            motify-silicon.app
+            motify-macos
+            motify-macos-silicon
