@@ -43,7 +43,7 @@ jobs:
           command: build
           args: --release --target ${{ matrix.target }}
       - name: Rename Mac releases
-        if: contains(${{ matrix.target }}, "apple-darwin")
+        if: ${{ contains(matrix.target, 'apple-darwin') }}
         run: "[ ! -f target/${{ matrix.target }}/release/motify ] || mv target/${{ matrix.target }}/release/motify target/${{ matrix.target }}/release/${{ matrix.name }}"
         shell: bash
       - name: Upload release
