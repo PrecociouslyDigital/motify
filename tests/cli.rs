@@ -42,12 +42,20 @@ impl Fixture {
         cmd
     }
 
-    /// Runs motify and returns (success, stdout + stderr with colour codes removed).
-    fn run(&self, args: &[&str]) -> (bool, String) {
+    /// Runs motify and returns (success, stdout, stderr) with colour codes removed.
+    fn run_split(&self, args: &[&str]) -> (bool, String, String) {
         let output = self.cmd(args).output().unwrap();
-        let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
-        text.push_str(&String::from_utf8_lossy(&output.stderr));
-        (output.status.success(), strip_ansi(&text))
+        (
+            output.status.success(),
+            strip_ansi(&String::from_utf8_lossy(&output.stdout)),
+            strip_ansi(&String::from_utf8_lossy(&output.stderr)),
+        )
+    }
+
+    /// Runs motify and returns (success, stdout + stderr) with colour codes removed.
+    fn run(&self, args: &[&str]) -> (bool, String) {
+        let (ok, stdout, stderr) = self.run_split(args);
+        (ok, stdout + &stderr)
     }
 }
 
@@ -148,10 +156,11 @@ fn deploy_links_files_and_directories() {
 fn deploy_refuses_existing_target() {
     let f = Fixture::new(BASIC);
     fs::write(file_target(&f), "precious").unwrap();
-    let (_, out) = f.run(&["deploy"]);
+    let (ok, _, err) = f.run_split(&["deploy"]);
+    assert!(!ok, "a failed entry must fail the run");
     assert!(
-        out.contains("Error in Deploying file: Target location already exists!"),
-        "{out}"
+        err.contains("Error in Deploying file: Target location already exists!"),
+        "{err}"
     );
     assert_eq!(fs::read_to_string(file_target(&f)).unwrap(), "precious");
     // Later entries still run.
@@ -162,7 +171,8 @@ fn deploy_refuses_existing_target() {
 fn undeploy_removes_file_link() {
     let f = Fixture::new(BASIC);
     assert!(f.run(&["deploy"]).0);
-    let (_, out) = f.run(&["undeploy"]);
+    let (ok, out) = f.run(&["undeploy"]);
+    assert!(ok, "{out}");
     assert!(out.contains("Finished Undeploying file!"), "{out}");
     assert_absent(&file_target(&f));
     assert!(f.path("test.txt").exists(), "source must survive");
@@ -217,8 +227,10 @@ fn verbose_prints_source() {
 #[test]
 fn missing_config_reports_error() {
     let f = Fixture::new("");
-    let (_, out) = f.run(&["-c", "nope.yaml", "deploy"]);
-    assert!(out.starts_with("Error in reading config file: "), "{out}");
+    let (ok, out, err) = f.run_split(&["-c", "nope.yaml", "deploy"]);
+    assert!(!ok);
+    assert_eq!(out, "");
+    assert!(err.starts_with("Error in reading config file: "), "{err}");
 }
 
 #[test]
@@ -227,4 +239,29 @@ fn no_subcommand_prints_help() {
     let (ok, out) = f.run(&[]);
     assert!(!ok);
     assert!(out.contains("deploy") && out.contains("undeploy"), "{out}");
+}
+
+#[test]
+fn entry_without_value_for_this_os_fails_alone() {
+    let f = Fixture::new(
+        "deploy:\n  a:\n    source: ./test.txt\n    target:\n      plan9: ./a.txt\n  b:\n    source: ./test.txt\n    target: ./b.txt\n",
+    );
+    let (ok, out) = f.run(&["deploy"]);
+    assert!(!ok);
+    assert!(
+        out.contains("Error in Deploying a: no target configured for "),
+        "{out}"
+    );
+    assert_links_to(&f.path("b.txt"), &f.path("test.txt"));
+}
+
+#[test]
+fn malformed_config_is_an_error_not_a_panic() {
+    for config in ["", "env: {}\n", "deploy: ["] {
+        let f = Fixture::new(config);
+        let (ok, _, err) = f.run_split(&["deploy"]);
+        assert!(!ok);
+        assert!(err.starts_with("Error in reading config file: "), "{err}");
+        assert!(!err.contains("panicked"), "{err}");
+    }
 }

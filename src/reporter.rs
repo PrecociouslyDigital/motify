@@ -40,7 +40,7 @@ impl<'a> Reporter<'a> {
     }
 
     pub fn error(&self, message: impl Display) {
-        bunt::println!(
+        bunt::eprintln!(
             "{$red+bold}Error in {}ing {}:{/$} {[red]}",
             self.verb,
             self.name,
