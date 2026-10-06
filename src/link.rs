@@ -1,6 +1,8 @@
 //! Creating and removing the symlinks themselves.
 
 use std::fs;
+use std::io;
+use std::path::Path;
 
 use crate::error::EntryError;
 use crate::reporter::Reporter;
@@ -29,14 +31,18 @@ pub fn undeploy(link: &Link, report: &Reporter) -> Result<(), EntryError> {
         link.target, link.source
     ));
     let source = fs::canonicalize(&link.source)?;
-    let resolved_target = fs::canonicalize(&link.target)?;
-    if resolved_target != source {
+    if !is_symlink_to(Path::new(&link.target), &source)? {
         return Err(EntryError::TargetMismatch);
     }
-    let _ = if fs::metadata(&resolved_target)?.is_dir() {
-        fs::remove_dir(&link.target)
-    } else {
-        fs::remove_file(&link.target)
-    };
+    symlink::remove_symlink_auto(&link.target)?;
     Ok(())
+}
+
+/// Whether `target` is itself a symlink that ultimately resolves to `source` (already canonical).
+///
+/// Checking the link itself, rather than only where the path resolves, means a real file
+/// reached through a symlinked parent directory is never mistaken for our link.
+fn is_symlink_to(target: &Path, source: &Path) -> io::Result<bool> {
+    let is_symlink = fs::symlink_metadata(target)?.file_type().is_symlink();
+    Ok(is_symlink && fs::canonicalize(target).is_ok_and(|resolved| resolved == source))
 }

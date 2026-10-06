@@ -90,6 +90,13 @@ fn assert_links_to(link: &Path, source: &Path) {
     );
 }
 
+fn symlink_dir(source: &Path, link: &Path) {
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(source, link).unwrap();
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_dir(source, link).unwrap();
+}
+
 fn assert_absent(path: &Path) {
     assert!(
         fs::symlink_metadata(path).is_err(),
@@ -264,4 +271,37 @@ fn malformed_config_is_an_error_not_a_panic() {
         assert!(err.starts_with("Error in reading config file: "), "{err}");
         assert!(!err.contains("panicked"), "{err}");
     }
+}
+
+#[test]
+fn undeploy_removes_directory_link() {
+    let f = Fixture::new(BASIC);
+    assert!(f.run(&["deploy"]).0);
+    let (ok, out) = f.run(&["undeploy"]);
+    assert!(ok, "{out}");
+    assert!(out.contains("Finished Undeploying dir!"), "{out}");
+    assert_absent(&dir_target(&f));
+    assert!(f.path("test/uwu.txt").exists(), "source must survive");
+}
+
+#[test]
+fn undeploy_never_deletes_the_source_through_a_symlinked_parent() {
+    let f = Fixture::new("deploy:\n  a:\n    source: ./test.txt\n    target: ./alias/test.txt\n");
+    // ./alias/test.txt resolves to ./test.txt but is the real file, not a link.
+    symlink_dir(f.work.path(), &f.path("alias"));
+    let (ok, out) = f.run(&["undeploy"]);
+    assert!(!ok);
+    assert!(
+        out.contains("Target location does not correspond to source!"),
+        "{out}"
+    );
+    assert!(f.path("test.txt").exists(), "source must survive");
+}
+
+#[test]
+fn undeploy_missing_target_is_an_error() {
+    let f = Fixture::new(BASIC);
+    let (ok, out) = f.run(&["undeploy"]);
+    assert!(!ok);
+    assert!(out.contains("Error in Undeploying file: "), "{out}");
 }
