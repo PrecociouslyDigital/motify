@@ -305,3 +305,34 @@ fn undeploy_missing_target_is_an_error() {
     assert!(!ok);
     assert!(out.contains("Error in Undeploying file: "), "{out}");
 }
+
+#[test]
+fn overwrite_replaces_existing_symlinks() {
+    let f = Fixture::new("deploy:\n  a:\n    source: ./test.txt\n    target: ./out\n");
+    symlink_dir(&f.path("test"), &f.path("out"));
+    let (ok, out) = f.run(&["deploy"]);
+    assert!(!ok, "without -o the existing link is kept: {out}");
+
+    let (ok, out) = f.run(&["deploy", "-o"]);
+    assert!(ok, "{out}");
+    assert_links_to(&f.path("out"), &f.path("test.txt"));
+    assert!(
+        f.path("test/uwu.txt").exists(),
+        "old link's source must survive"
+    );
+}
+
+#[test]
+fn overwrite_never_replaces_real_files() {
+    let f = Fixture::new(BASIC);
+    fs::write(file_target(&f), "precious").unwrap();
+    let (ok, out) = f.run(&["deploy", "-o"]);
+    assert!(!ok);
+    assert!(
+        out.contains(
+            "Error in Deploying file: Target location already exists and is not a symlink!"
+        ),
+        "{out}"
+    );
+    assert_eq!(fs::read_to_string(file_target(&f)).unwrap(), "precious");
+}

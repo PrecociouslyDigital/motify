@@ -17,8 +17,12 @@ pub fn deploy(link: &Link, overwrite: bool, report: &Reporter) -> Result<(), Ent
         source.display(),
         link.target
     ));
-    if !overwrite && fs::metadata(&link.target).is_ok() {
-        return Err(EntryError::TargetExists);
+    match fs::symlink_metadata(&link.target) {
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err.into()),
+        Ok(_) if !overwrite => return Err(EntryError::TargetExists),
+        Ok(meta) if meta.file_type().is_symlink() => symlink::remove_symlink_auto(&link.target)?,
+        Ok(_) => return Err(EntryError::TargetNotSymlink),
     }
     symlink::symlink_auto(&source, &link.target)?;
     Ok(())

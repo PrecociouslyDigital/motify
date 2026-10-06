@@ -23,6 +23,8 @@ pub enum EntryError {
     Expand(#[from] ExpandError),
     #[error("Target location already exists!")]
     TargetExists,
+    #[error("Target location already exists and is not a symlink!")]
+    TargetNotSymlink,
     #[error("Target location does not correspond to source!")]
     TargetMismatch,
     #[error(transparent)]

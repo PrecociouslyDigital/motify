@@ -25,7 +25,7 @@ pub struct Cli {
 pub enum Command {
     /// Deploy symlinks according to a motify.yaml file.
     Deploy {
-        /// Overwrite destination even if it exists
+        /// Replace the destination if it is already a symlink
         #[arg(short, long)]
         overwrite: bool,
     },
