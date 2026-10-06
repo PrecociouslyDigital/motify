@@ -71,7 +71,11 @@ fn strip_ansi(s: &str) -> String {
 fn assert_links_to(link: &Path, source: &Path) {
     let meta = fs::symlink_metadata(link)
         .unwrap_or_else(|e| panic!("{} should exist: {e}", link.display()));
-    assert!(meta.file_type().is_symlink(), "{} is not a symlink", link.display());
+    assert!(
+        meta.file_type().is_symlink(),
+        "{} is not a symlink",
+        link.display()
+    );
     assert_eq!(
         fs::canonicalize(link).unwrap(),
         fs::canonicalize(source).unwrap()
@@ -186,7 +190,12 @@ fn config_env_beats_process_env_and_process_env_is_fallback() {
         .env("name", "fromenv")
         .env("other", "envonly")
         .output()
-        .map(|o| (o.status.success(), String::from_utf8_lossy(&o.stdout).into_owned()))
+        .map(|o| {
+            (
+                o.status.success(),
+                String::from_utf8_lossy(&o.stdout).into_owned(),
+            )
+        })
         .unwrap();
     assert!(ok, "{out}");
     assert_links_to(&f.path("fromconfig.envonly.txt"), &f.path("test.txt"));
@@ -199,7 +208,10 @@ fn verbose_prints_source() {
     assert!(f.run(&["undeploy"]).0);
     let (_, loud) = f.run(&["-v", "deploy"]);
     assert_eq!(loud.lines().count(), quiet.lines().count() + 1, "{loud}");
-    assert!(loud.lines().nth(1).unwrap().ends_with("./test.txt"), "{loud}");
+    assert!(
+        loud.lines().nth(1).unwrap().ends_with("./test.txt"),
+        "{loud}"
+    );
 }
 
 #[test]
