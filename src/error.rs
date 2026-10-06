@@ -9,7 +9,13 @@ pub enum ConfigError {
     Yaml(#[from] serde_saphyr::Error),
 }
 
-pub type ExpandError = shellexpand::LookupError<std::convert::Infallible>;
+#[derive(Debug, Error)]
+pub enum ExpandError {
+    #[error("variable {0} is not defined")]
+    Undefined(String),
+    #[error("variable {var} has no value for {os}")]
+    MissingForOs { var: String, os: String },
+}
 
 /// Why a single deploy entry failed.
 #[derive(Debug, Error)]

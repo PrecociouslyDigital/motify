@@ -336,3 +336,16 @@ fn overwrite_never_replaces_real_files() {
     );
     assert_eq!(fs::read_to_string(file_target(&f)).unwrap(), "precious");
 }
+
+#[test]
+fn undefined_variables_are_errors() {
+    let f =
+        Fixture::new("deploy:\n  a:\n    source: ./test.txt\n    target: ./unix.$TESTVAR.txt\n");
+    let (ok, out) = f.run(&["deploy"]);
+    assert!(!ok);
+    assert!(
+        out.contains("Error in Deploying a: variable TESTVAR is not defined"),
+        "{out}"
+    );
+    assert_absent(&f.path("unix.$TESTVAR.txt"));
+}
