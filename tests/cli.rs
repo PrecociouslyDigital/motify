@@ -1,0 +1,351 @@
+//! End-to-end tests that run the `motify` binary against a temporary directory.
+
+use assert_cmd::Command;
+use std::fs;
+use std::path::{Path, PathBuf};
+use tempfile::TempDir;
+
+/// A scratch working directory plus a fake home directory.
+struct Fixture {
+    work: TempDir,
+    home: TempDir,
+}
+
+impl Fixture {
+    fn new(config: &str) -> Self {
+        let fixture = Fixture {
+            work: TempDir::new().unwrap(),
+            home: TempDir::new().unwrap(),
+        };
+        fs::write(fixture.path("motify.yaml"), config).unwrap();
+        fs::write(fixture.path("test.txt"), "This is a test!").unwrap();
+        fs::create_dir(fixture.path("test")).unwrap();
+        fs::write(fixture.path("test/uwu.txt"), "uwu").unwrap();
+        fixture
+    }
+
+    fn path(&self, rel: &str) -> PathBuf {
+        self.work.path().join(rel)
+    }
+
+    fn home(&self, rel: &str) -> PathBuf {
+        self.home.path().join(rel)
+    }
+
+    fn cmd(&self, args: &[&str]) -> Command {
+        let mut cmd = Command::cargo_bin("motify").unwrap();
+        cmd.current_dir(self.work.path())
+            .env("HOME", self.home.path())
+            .env("USERPROFILE", self.home.path())
+            .env_remove("TESTVAR")
+            .args(args);
+        cmd
+    }
+
+    /// Runs motify and returns (success, stdout, stderr) with colour codes removed.
+    fn run_split(&self, args: &[&str]) -> (bool, String, String) {
+        let output = self.cmd(args).output().unwrap();
+        (
+            output.status.success(),
+            strip_ansi(&String::from_utf8_lossy(&output.stdout)),
+            strip_ansi(&String::from_utf8_lossy(&output.stderr)),
+        )
+    }
+
+    /// Runs motify and returns (success, stdout + stderr) with colour codes removed.
+    fn run(&self, args: &[&str]) -> (bool, String) {
+        let (ok, stdout, stderr) = self.run_split(args);
+        (ok, stdout + &stderr)
+    }
+}
+
+fn strip_ansi(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            for c in chars.by_ref() {
+                if c.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+fn assert_links_to(link: &Path, source: &Path) {
+    let meta = fs::symlink_metadata(link)
+        .unwrap_or_else(|e| panic!("{} should exist: {e}", link.display()));
+    assert!(
+        meta.file_type().is_symlink(),
+        "{} is not a symlink",
+        link.display()
+    );
+    assert_eq!(
+        fs::canonicalize(link).unwrap(),
+        fs::canonicalize(source).unwrap()
+    );
+}
+
+fn symlink_dir(source: &Path, link: &Path) {
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(source, link).unwrap();
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_dir(source, link).unwrap();
+}
+
+fn assert_absent(path: &Path) {
+    assert!(
+        fs::symlink_metadata(path).is_err(),
+        "{} should not exist",
+        path.display()
+    );
+}
+
+const BASIC: &str = "\
+deploy:
+  file:
+    source: ./test.txt
+    target:
+      windows: ./windows.$suffix.txt
+      linux: ./unix.$suffix.txt
+      macos: ./unix.$suffix.txt
+  dir:
+    source: ./$folder
+    target: ~/$dirTarget
+env:
+  folder: test
+  suffix: x
+  dirTarget:
+    windows: winuwu
+    linux: linuwu
+    macos: linuwu
+";
+
+fn file_target(f: &Fixture) -> PathBuf {
+    if cfg!(windows) {
+        f.path("windows.x.txt")
+    } else {
+        f.path("unix.x.txt")
+    }
+}
+
+fn dir_target(f: &Fixture) -> PathBuf {
+    if cfg!(windows) {
+        f.home("winuwu")
+    } else {
+        f.home("linuwu")
+    }
+}
+
+#[test]
+fn deploy_links_files_and_directories() {
+    let f = Fixture::new(BASIC);
+    let (ok, out) = f.run(&["deploy"]);
+    assert!(ok, "{out}");
+
+    assert_links_to(&file_target(&f), &f.path("test.txt"));
+    assert_links_to(&dir_target(&f), &f.path("test"));
+
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines.len(), 6, "{out}");
+    assert!(lines[0].starts_with("Deploying file to ./"), "{out}");
+    assert!(lines[1].starts_with("file: symlinking "), "{out}");
+    assert_eq!(lines[2], "Finished Deploying file!");
+    assert!(lines[3].starts_with("Deploying dir to "), "{out}");
+    assert_eq!(lines[5], "Finished Deploying dir!");
+}
+
+#[test]
+fn deploy_refuses_existing_target() {
+    let f = Fixture::new(BASIC);
+    fs::write(file_target(&f), "precious").unwrap();
+    let (ok, _, err) = f.run_split(&["deploy"]);
+    assert!(!ok, "a failed entry must fail the run");
+    assert!(
+        err.contains("Error in Deploying file: Target location already exists!"),
+        "{err}"
+    );
+    assert_eq!(fs::read_to_string(file_target(&f)).unwrap(), "precious");
+    // Later entries still run.
+    assert_links_to(&dir_target(&f), &f.path("test"));
+}
+
+#[test]
+fn undeploy_removes_file_link() {
+    let f = Fixture::new(BASIC);
+    assert!(f.run(&["deploy"]).0);
+    let (ok, out) = f.run(&["undeploy"]);
+    assert!(ok, "{out}");
+    assert!(out.contains("Finished Undeploying file!"), "{out}");
+    assert_absent(&file_target(&f));
+    assert!(f.path("test.txt").exists(), "source must survive");
+}
+
+#[test]
+fn undeploy_refuses_unrelated_target() {
+    let f = Fixture::new(BASIC);
+    fs::write(file_target(&f), "precious").unwrap();
+    let (_, out) = f.run(&["undeploy"]);
+    assert!(
+        out.contains("Error in Undeploying file: Target location does not correspond to source!"),
+        "{out}"
+    );
+    assert_eq!(fs::read_to_string(file_target(&f)).unwrap(), "precious");
+}
+
+#[test]
+fn config_env_beats_process_env_and_process_env_is_fallback() {
+    let f = Fixture::new(
+        "deploy:\n  a:\n    source: ./test.txt\n    target: ./$name.$other.txt\nenv:\n  name: fromconfig\n",
+    );
+    let (ok, out) = f
+        .cmd(&["deploy"])
+        .env("name", "fromenv")
+        .env("other", "envonly")
+        .output()
+        .map(|o| {
+            (
+                o.status.success(),
+                String::from_utf8_lossy(&o.stdout).into_owned(),
+            )
+        })
+        .unwrap();
+    assert!(ok, "{out}");
+    assert_links_to(&f.path("fromconfig.envonly.txt"), &f.path("test.txt"));
+}
+
+#[test]
+fn verbose_prints_source() {
+    let f = Fixture::new("deploy:\n  a:\n    source: ./test.txt\n    target: ./out.txt\n");
+    let (_, quiet) = f.run(&["deploy"]);
+    assert!(f.run(&["undeploy"]).0);
+    let (_, loud) = f.run(&["-v", "deploy"]);
+    assert_eq!(loud.lines().count(), quiet.lines().count() + 1, "{loud}");
+    assert!(
+        loud.lines().nth(1).unwrap().ends_with("./test.txt"),
+        "{loud}"
+    );
+}
+
+#[test]
+fn missing_config_reports_error() {
+    let f = Fixture::new("");
+    let (ok, out, err) = f.run_split(&["-c", "nope.yaml", "deploy"]);
+    assert!(!ok);
+    assert_eq!(out, "");
+    assert!(err.starts_with("Error in reading config file: "), "{err}");
+}
+
+#[test]
+fn no_subcommand_prints_help() {
+    let f = Fixture::new("");
+    let (ok, out) = f.run(&[]);
+    assert!(!ok);
+    assert!(out.contains("deploy") && out.contains("undeploy"), "{out}");
+}
+
+#[test]
+fn entry_without_value_for_this_os_fails_alone() {
+    let f = Fixture::new(
+        "deploy:\n  a:\n    source: ./test.txt\n    target:\n      plan9: ./a.txt\n  b:\n    source: ./test.txt\n    target: ./b.txt\n",
+    );
+    let (ok, out) = f.run(&["deploy"]);
+    assert!(!ok);
+    assert!(
+        out.contains("Error in Deploying a: no target configured for "),
+        "{out}"
+    );
+    assert_links_to(&f.path("b.txt"), &f.path("test.txt"));
+}
+
+#[test]
+fn malformed_config_is_an_error_not_a_panic() {
+    for config in ["", "env: {}\n", "deploy: ["] {
+        let f = Fixture::new(config);
+        let (ok, _, err) = f.run_split(&["deploy"]);
+        assert!(!ok);
+        assert!(err.starts_with("Error in reading config file: "), "{err}");
+        assert!(!err.contains("panicked"), "{err}");
+    }
+}
+
+#[test]
+fn undeploy_removes_directory_link() {
+    let f = Fixture::new(BASIC);
+    assert!(f.run(&["deploy"]).0);
+    let (ok, out) = f.run(&["undeploy"]);
+    assert!(ok, "{out}");
+    assert!(out.contains("Finished Undeploying dir!"), "{out}");
+    assert_absent(&dir_target(&f));
+    assert!(f.path("test/uwu.txt").exists(), "source must survive");
+}
+
+#[test]
+fn undeploy_never_deletes_the_source_through_a_symlinked_parent() {
+    let f = Fixture::new("deploy:\n  a:\n    source: ./test.txt\n    target: ./alias/test.txt\n");
+    // ./alias/test.txt resolves to ./test.txt but is the real file, not a link.
+    symlink_dir(f.work.path(), &f.path("alias"));
+    let (ok, out) = f.run(&["undeploy"]);
+    assert!(!ok);
+    assert!(
+        out.contains("Target location does not correspond to source!"),
+        "{out}"
+    );
+    assert!(f.path("test.txt").exists(), "source must survive");
+}
+
+#[test]
+fn undeploy_missing_target_is_an_error() {
+    let f = Fixture::new(BASIC);
+    let (ok, out) = f.run(&["undeploy"]);
+    assert!(!ok);
+    assert!(out.contains("Error in Undeploying file: "), "{out}");
+}
+
+#[test]
+fn overwrite_replaces_existing_symlinks() {
+    let f = Fixture::new("deploy:\n  a:\n    source: ./test.txt\n    target: ./out\n");
+    symlink_dir(&f.path("test"), &f.path("out"));
+    let (ok, out) = f.run(&["deploy"]);
+    assert!(!ok, "without -o the existing link is kept: {out}");
+
+    let (ok, out) = f.run(&["deploy", "-o"]);
+    assert!(ok, "{out}");
+    assert_links_to(&f.path("out"), &f.path("test.txt"));
+    assert!(
+        f.path("test/uwu.txt").exists(),
+        "old link's source must survive"
+    );
+}
+
+#[test]
+fn overwrite_never_replaces_real_files() {
+    let f = Fixture::new(BASIC);
+    fs::write(file_target(&f), "precious").unwrap();
+    let (ok, out) = f.run(&["deploy", "-o"]);
+    assert!(!ok);
+    assert!(
+        out.contains(
+            "Error in Deploying file: Target location already exists and is not a symlink!"
+        ),
+        "{out}"
+    );
+    assert_eq!(fs::read_to_string(file_target(&f)).unwrap(), "precious");
+}
+
+#[test]
+fn undefined_variables_are_errors() {
+    let f =
+        Fixture::new("deploy:\n  a:\n    source: ./test.txt\n    target: ./unix.$TESTVAR.txt\n");
+    let (ok, out) = f.run(&["deploy"]);
+    assert!(!ok);
+    assert!(
+        out.contains("Error in Deploying a: variable TESTVAR is not defined"),
+        "{out}"
+    );
+    assert_absent(&f.path("unix.$TESTVAR.txt"));
+}

@@ -28,26 +28,18 @@ jobs:
             name: motify-macos-silicon
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v2
-      - name: Install latest nightly
-        uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-            profile: minimal
-            toolchain: nightly
-            override: true
-            components: rustfmt, clippy
-            target: ${{ matrix.target }}
+          targets: ${{ matrix.target }}
       - name: Build Artifact
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --target ${{ matrix.target }}
+        run: cargo build --release --locked --target ${{ matrix.target }}
       - name: Rename Mac releases
         if: ${{ contains(matrix.target, 'apple-darwin') }}
-        run: "[ ! -f target/${{ matrix.target }}/release/motify ] || mv target/${{ matrix.target }}/release/motify target/${{ matrix.target }}/release/${{ matrix.name }}"
+        run: mv target/${{ matrix.target }}/release/motify target/${{ matrix.target }}/release/${{ matrix.name }}
         shell: bash
       - name: Upload release
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
           path: target/${{ matrix.target }}/release/${{ matrix.name }}
@@ -56,22 +48,10 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Download a single artifact
-        uses: actions/download-artifact@v2
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
         with:
-          name: motify
-      - name: Download a single artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: motify.exe
-      - name: Download a single artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: motify-macos
-      - name: Download a single artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: motify-macos-silicon
+          merge-multiple: true
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.PAT_GITHUB }}"
